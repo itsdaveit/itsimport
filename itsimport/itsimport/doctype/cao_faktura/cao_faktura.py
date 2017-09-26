@@ -14,7 +14,7 @@ class CAOFaktura(Document):
         caodb = frappe.database.Database(host=self.cao_datenbankserver, user=self.cao_user, password = self.cao_passwort)
         caodb.begin()
         caodb.use(self.cao_datenbank)
-        caoAddresses = caodb.sql("Select ANREDE, KUNNUM1, NAME1, NAME2, NAME3, STRASSE, PLZ, ORT, LAND from adressen where KUNNUM1 <>'' LIMIT 10;", as_dict=1)
+        caoAddresses = caodb.sql("Select ANREDE, KUNNUM1, NAME1, NAME2, NAME3, STRASSE, PLZ, ORT, LAND from adressen where KUNNUM1 <>'';", as_dict=1)
         #Statistikzähler initialisieren
         count_customerTotal = 0
         count_customerInserted = 0
