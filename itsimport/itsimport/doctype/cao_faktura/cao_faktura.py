@@ -7,6 +7,10 @@ import frappe
 from frappe.model.document import Document
 from frappe.database import Database
 from time import sleep
+import MySQLdb as mdb
+import sys
+reload(sys)
+sys.setdefaultencoding('utf-8')
 
 class CAOFaktura(Document):
     def runCaoImport(self):
@@ -135,3 +139,58 @@ class CAOFaktura(Document):
         if not customer_name_new:
             customer_name_new = 'CAO Kunde ' + caoAddress['KUNNUM1'].strip()
         return customer_name_new
+
+    def create_item(self, item_data):
+
+        item_code = "CAO-" + item_data["map_id"]
+        found_items = frappe.get_all("Item", filters={"item_code": item_code }, fields=["name", "item_code"] )
+        if len(found_items) >= 1:
+            print "Item " + item_code + " allready exists."
+
+        else:
+            item_doc = frappe.get_doc({"doctype": "Item",
+            "item_code": item_code,
+            "item_group": self.destination_articlegroup,
+            "item_name": item_data["desc_short"],
+            "is_stock_item": item_data["is_stock_item"],
+            "standard_rate": item_data["standard_rate"],
+            "opening_stock": item_data["opening_stock"]
+            })
+            item = item_doc.insert()
+            if item == "vggr":
+                stock_entry_detail = frappe.get_doc({   "doctype": "Stock Entry Detail",
+                                                        "t_warehouse": self.t_warehouse,
+                                                        "item_code": item_code,
+                                                        "qty": item_data["opening_stock"]})
+
+                stock_entry = frappe.get_doc({"doctype": "Stock Entry",
+                                        #"name" : "CAO-Import-Mengenübernahme",
+                                        "purpose": "Material Receipt"
+
+                                        })
+                stock_entry.append("items", stock_entry_detail)
+                ste_name = stock_entry.insert().name
+
+                print ste_name
+
+                STE = frappe.get_doc("Stock Entry", ste_name)
+
+                STE.submit()
+
+
+    def runArticleImport(self):
+        con = mdb.connect(self.cao_datenbankserver, self.cao_user, self.cao_passwort, self.cao_datenbank)
+        sql = (   "select ARTNUM, WARENGRUPPE, KURZNAME, LANGNAME, EK_PREIS, VK5, MENGE_AKT "
+                                    "from artikel "
+                                    "where MENGE_AKT > 0;")
+        cur = con.cursor()
+        cur.execute(sql)
+        rows = cur.fetchall()
+        items = []
+        for row in rows:
+            item = {"map_id": str(row[0]).decode('iso-8859-1').encode('utf-8')[:140],
+                    "desc_short": str(row[2]).decode('iso-8859-1').encode('utf-8')[:140],
+                    "standard_rate": row[5],
+                    "is_stock_item": True,
+                    "opening_stock": row[6]}
+            self.create_item(item)
